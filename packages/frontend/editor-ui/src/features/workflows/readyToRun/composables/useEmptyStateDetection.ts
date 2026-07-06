@@ -1,4 +1,6 @@
 import type { RouteLocationNormalized } from 'vue-router';
+import { useLocalStorage } from '@vueuse/core';
+import { LOCAL_STORAGE_INSTANCE_HAS_CONTENT } from '@/app/constants/localStorage';
 import { useFoldersStore } from '@/features/core/folders/folders.store';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
 import { useEnvironmentsStore } from '@/features/settings/environments.ee/environments.store';
@@ -16,6 +18,19 @@ export function useEmptyStateDetection() {
 	const dataTableStore = useDataTableStore();
 	const projectPages = useProjectPages();
 	const route = useRoute();
+
+	// Hint that this browser has seen instance content before. Lets returning
+	// users keep instant chrome while first-run users get a neutral loading
+	// state instead of a flash of list chrome that is immediately torn down.
+	// `flush: 'sync'` writes immediately so the hint is durable the moment
+	// setInstanceHasContent resolves, rather than waiting on Vue's scheduler.
+	const instanceHasContentHint = useLocalStorage(LOCAL_STORAGE_INSTANCE_HAS_CONTENT, false, {
+		flush: 'sync',
+	});
+
+	const setInstanceHasContent = (value: boolean) => {
+		instanceHasContentHint.value = value;
+	};
 
 	/**
 	 * Checks if the current state qualifies as "truly empty"
@@ -60,5 +75,7 @@ export function useEmptyStateDetection() {
 
 	return {
 		isTrulyEmpty,
+		instanceHasContentHint,
+		setInstanceHasContent,
 	};
 }

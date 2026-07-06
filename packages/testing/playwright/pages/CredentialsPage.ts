@@ -13,7 +13,9 @@ export class CredentialsPage extends BasePage {
 	readonly cards = new ResourceCards(this.page);
 
 	get emptyListCreateCredentialButton() {
-		return this.page.getByRole('button', { name: 'Add first credential' });
+		return this.page
+			.getByTestId('empty-resources-list')
+			.getByRole('button', { name: 'Create credential' });
 	}
 
 	get createCredentialButton() {

@@ -148,4 +148,29 @@ describe('useEmptyStateDetection', () => {
 			expect(isTrulyEmpty(route)).toBe(false);
 		});
 	});
+
+	describe('instanceHasContentHint', () => {
+		beforeEach(() => {
+			localStorage.clear();
+		});
+
+		it('defaults to false on a fresh browser', () => {
+			const { instanceHasContentHint } = useEmptyStateDetection();
+			expect(instanceHasContentHint.value).toBe(false);
+		});
+
+		it('persists once set', () => {
+			const { setInstanceHasContent } = useEmptyStateDetection();
+			setInstanceHasContent(true);
+			const { instanceHasContentHint } = useEmptyStateDetection();
+			expect(instanceHasContentHint.value).toBe(true);
+		});
+
+		it('can be cleared when the instance is emptied', () => {
+			const { setInstanceHasContent, instanceHasContentHint } = useEmptyStateDetection();
+			setInstanceHasContent(true);
+			setInstanceHasContent(false);
+			expect(instanceHasContentHint.value).toBe(false);
+		});
+	});
 });

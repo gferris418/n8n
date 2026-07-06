@@ -4,7 +4,9 @@ import { computed, nextTick, ref, onMounted, watch, onBeforeUnmount } from 'vue'
 import PageViewLayout from '@/app/components/layouts/PageViewLayout.vue';
 import PageViewLayoutList from '@/app/components/layouts/PageViewLayoutList.vue';
 import ResourceFiltersDropdown from '@/app/components/forms/ResourceFiltersDropdown.vue';
-import { useUsersStore } from '@/features/settings/users/users.store';
+import ResourcesListEmptyState, {
+	isEmptyStateResourceKey,
+} from '@/app/components/layouts/ResourcesListEmptyState.vue';
 import type { DatatableColumn } from '@n8n/design-system';
 import { useDebounce } from '@/app/composables/useDebounce';
 import { useTelemetry } from '@/app/composables/useTelemetry';
@@ -38,7 +40,6 @@ type UIConfig = {
 const route = useRoute();
 const router = useRouter();
 const { callDebounced } = useDebounce();
-const usersStore = useUsersStore();
 const telemetry = useTelemetry();
 const n8nLocalStorage = useN8nLocalStorage();
 
@@ -159,6 +160,19 @@ const showEmptyState = computed(() => {
 		!hasFilters.value &&
 		!filtersModel.value.search &&
 		!props.resourcesRefreshing
+	);
+});
+
+// While the first fetch is still deciding whether the list is empty, show the
+// neutral skeleton instead of the list chrome — otherwise the breadcrumb/search
+// row flashes and is immediately replaced by the empty state.
+const showLoadingState = computed(() => {
+	return (
+		props.loading ||
+		(props.resourcesRefreshing &&
+			props.resources.length === 0 &&
+			!hasFilters.value &&
+			!filtersModel.value.search)
 	);
 });
 
@@ -592,25 +606,24 @@ defineExpose({
 		<template #header>
 			<slot name="header" />
 		</template>
-		<div v-if="loading" class="resource-list-loading">
+		<div v-if="showLoadingState" class="resource-list-loading">
 			<N8nLoading :rows="25" :shrink-last="false" />
 		</div>
 		<template v-else>
 			<div v-if="showEmptyState">
 				<slot name="empty">
+					<ResourcesListEmptyState
+						v-if="isEmptyStateResourceKey(props.resourceKey)"
+						:resource-key="props.resourceKey"
+						:button-disabled="disabled"
+						@click:button="onAddButtonClick"
+					/>
 					<N8nActionBox
+						v-else
 						data-test-id="empty-resources-list"
-						:icon="{ type: 'emoji', value: '👋' }"
-						:heading="
-							getResourceText(
-								usersStore.currentUser?.firstName ? 'empty.heading' : 'empty.heading.userNotSetup',
-								usersStore.currentUser?.firstName ? 'empty.heading' : 'empty.heading.userNotSetup',
-								{ name: usersStore.currentUser?.firstName ?? '' },
-							)
-						"
+						:heading="getResourceText('empty.heading', 'empty.heading')"
 						:description="getResourceText('empty.description')"
 						:button-text="getResourceText('empty.button')"
-						button-type="secondary"
 						:button-disabled="disabled"
 						@click:button="onAddButtonClick"
 					>

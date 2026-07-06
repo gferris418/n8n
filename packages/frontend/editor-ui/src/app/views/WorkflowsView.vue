@@ -7,6 +7,7 @@ import {
 	FOLDER_LIST_ITEM_ACTIONS,
 	MCP_ACCESS_ACTIONS,
 } from '@/features/core/folders/folders.constants';
+import ResourcesListEmptyState from '@/app/components/layouts/ResourcesListEmptyState.vue';
 import ResourcesListLayout from '@/app/components/layouts/ResourcesListLayout.vue';
 import ProjectHeader from '@/features/collaboration/projects/components/ProjectHeader.vue';
 import WorkflowCard from '@/app/components/WorkflowCard.vue';
@@ -49,6 +50,7 @@ import { usePersonalizedTemplatesV2Store } from '@/experiments/templateRecoV2/st
 import { usePersonalizedTemplatesV3Store } from '@/experiments/personalizedTemplatesV3/stores/personalizedTemplatesV3.store';
 import EmptyStateLayout from '@/app/components/layouts/EmptyStateLayout.vue';
 import { useReadyToRunStore } from '@/features/workflows/readyToRun/stores/readyToRun.store';
+import { useEmptyStateDetection } from '@/features/workflows/readyToRun/composables/useEmptyStateDetection';
 import InsightsSummary from '@/features/execution/insights/components/InsightsSummary.vue';
 import { useInsightsStore } from '@/features/execution/insights/insights.store';
 import { useWorkflowsEmptyState } from '@/features/workflows/composables/useWorkflowsEmptyState';
@@ -101,7 +103,6 @@ import {
 	N8nCallout,
 	N8nCard,
 	N8nCheckbox,
-	N8nHeading,
 	N8nIcon,
 	N8nInfoTip,
 	N8nInlineTextEdit,
@@ -174,13 +175,14 @@ const { callDebounced } = useDebounce();
 const projectPages = useProjectPages();
 const { next: nextFetch } = useLatestFetch();
 const { fetchDependencyCounts } = useDependencies();
-const {
-	showRecommendedTemplatesInline,
-	emptyStateHeading: emptyListHeading,
-	emptyStateDescription: emptyListDescription,
-	readOnlyEnv,
-	projectPermissions,
-} = useWorkflowsEmptyState();
+const { showRecommendedTemplatesInline, readOnlyEnv, projectPermissions } =
+	useWorkflowsEmptyState();
+const { instanceHasContentHint, setInstanceHasContent } = useEmptyStateDetection();
+const emptinessResolved = ref(false);
+
+const deferChromeForOnboarding = computed(
+	() => projectPages.isOverviewSubPage && !instanceHasContentHint.value && !emptinessResolved.value,
+);
 
 // We render component in a loading state until initialization is done
 // This will prevent any additional workflow fetches while initializing
@@ -628,15 +630,6 @@ const hasActiveCallouts = computed(() => {
 	);
 });
 
-const showStartFromScratchCard = computed(() => {
-	return (
-		!loading.value &&
-		!showRecommendedTemplatesInline.value &&
-		!readOnlyEnv.value &&
-		projectPermissions.value.workflow.create
-	);
-});
-
 /**
  * WATCHERS, STORE SUBSCRIPTIONS AND EVENT BUS HANDLERS
  */
@@ -736,6 +729,15 @@ onMounted(async () => {
 
 	void usersStore.showPersonalizationSurvey();
 
+	// ResourcesListLayout normally drives the initial fetch from its own
+	// onMounted, but it isn't rendered while we're deferring chrome for
+	// onboarding — so kick off initialize() here or the skeleton would never
+	// resolve. Once EmptyStateLayout/ResourcesListLayout mounts and takes
+	// over, subsequent fetches proceed through the layout as usual.
+	if (deferChromeForOnboarding.value) {
+		void initialize();
+	}
+
 	workflowListEventBus.on('resource-moved', fetchWorkflows);
 	workflowListEventBus.on('workflow-duplicated', fetchWorkflows);
 	workflowListEventBus.on('folder-deleted', onFolderDeleted);
@@ -761,6 +763,23 @@ onBeforeUnmount(() => {
 
 // Main component fetch methods
 const isInitializing = ref(false);
+
+const fetchEmptyStateData = async () => {
+	const variablesEnabled =
+		settingsStore.isEnterpriseFeatureEnabled[EnterpriseEditionFeature.Variables];
+	const dataTablesEnabled = settingsStore.isDataTableFeatureEnabled;
+
+	try {
+		await Promise.all([
+			credentialsStore.fetchAllCredentials(),
+			variablesEnabled ? environmentsStore.fetchAllVariables() : Promise.resolve(),
+			dataTablesEnabled ? dataTableStore.fetchDataTables('', 1, 1) : Promise.resolve(),
+		]);
+	} catch (error) {
+		toast.showError(error, i18n.baseText('workflows.list.error.fetching.emptyStateData'));
+	}
+};
+
 const initialize = async () => {
 	if (isInitializing.value) return;
 	isInitializing.value = true;
@@ -770,6 +789,11 @@ const initialize = async () => {
 
 		currentFolderId.value = route.params.folderId as string | null;
 
+		// Without the content hint we cannot know yet whether this is a first-run
+		// instance, so fetch the emptiness data in parallel instead of flashing
+		// the list chrome while waiting for a second round-trip.
+		const emptinessUnknown = projectPages.isOverviewSubPage && !instanceHasContentHint.value;
+
 		await Promise.all([
 			fetchWorkflows(),
 			workflowsListStore.fetchActiveWorkflows(),
@@ -778,30 +802,34 @@ const initialize = async () => {
 				route.params.projectId as string | undefined,
 				currentFolderId.value ?? undefined,
 			),
+			...(emptinessUnknown ? [fetchEmptyStateData()] : []),
 		]);
 
-		// Only needed on an empty overview to decide whether to show the simplified layout.
-		if (foldersStore.totalWorkflowCount === 0 && projectPages.isOverviewSubPage) {
-			const variablesEnabled =
-				settingsStore.isEnterpriseFeatureEnabled[EnterpriseEditionFeature.Variables];
-			const dataTablesEnabled = settingsStore.isDataTableFeatureEnabled;
-
+		// Stale-hint path: hint said "has content" but the workflow count came
+		// back 0, so the emptiness data still needs to be fetched to decide.
+		if (
+			!emptinessUnknown &&
+			foldersStore.totalWorkflowCount === 0 &&
+			projectPages.isOverviewSubPage
+		) {
 			loading.value = true;
-			try {
-				await Promise.all([
-					credentialsStore.fetchAllCredentials(),
-					variablesEnabled ? environmentsStore.fetchAllVariables() : Promise.resolve(),
-					dataTablesEnabled ? dataTableStore.fetchDataTables('', 1, 1) : Promise.resolve(),
-				]);
-			} catch (error) {
-				toast.showError(error, i18n.baseText('workflows.list.error.fetching.emptyStateData'));
-			}
+			await fetchEmptyStateData();
+		}
+
+		if (projectPages.isOverviewSubPage && foldersStore.workflowsCountLoaded) {
+			setInstanceHasContent(
+				foldersStore.totalWorkflowCount > 0 ||
+					credentialsStore.allCredentials.length > 0 ||
+					environmentsStore.variables.length > 0 ||
+					dataTableStore.totalCount > 0,
+			);
 		}
 
 		breadcrumbsLoading.value = false;
 	} finally {
 		loading.value = false;
 		isInitializing.value = false;
+		emptinessResolved.value = true;
 	}
 };
 
@@ -2147,7 +2175,14 @@ const onNameSubmit = async (name: string) => {
 </script>
 
 <template>
-	<EmptyStateLayout v-if="shouldUseSimplifiedLayout" @click:add="addWorkflow" />
+	<div
+		v-if="deferChromeForOnboarding"
+		:class="$style.onboardingLoading"
+		data-test-id="workflows-onboarding-loading"
+	>
+		<N8nLoading :rows="3" variant="p" />
+	</div>
+	<EmptyStateLayout v-else-if="shouldUseSimplifiedLayout" @click:add="addWorkflow" />
 
 	<ResourcesListLayout
 		v-else
@@ -2418,35 +2453,15 @@ const onNameSubmit = async (name: string) => {
 				<div v-if="showRecommendedTemplatesInline" :class="$style.templatesContainer">
 					<RecommendedTemplatesSection />
 				</div>
-				<div v-else :class="$style.emptyStateNoTemplates" data-test-id="list-empty-state">
-					<div class="text-center mt-s">
-						<N8nHeading tag="h2" size="xlarge" class="mb-2xs">
-							{{ emptyListHeading }}
-						</N8nHeading>
-						<N8nText size="large" color="text-base">
-							{{ emptyListDescription }}
-						</N8nText>
-					</div>
-					<N8nCard
-						v-if="showStartFromScratchCard"
-						:class="$style.emptyStateCard"
-						hoverable
-						data-test-id="new-workflow-card"
-						@click="addWorkflow"
-					>
-						<div :class="$style.emptyStateCardContent">
-							<N8nIcon
-								:class="$style.emptyStateCardIcon"
-								icon="file"
-								color="foreground-dark"
-								:stroke-width="1.5"
-							/>
-							<N8nText size="large" class="mt-xs">
-								{{ i18n.baseText('workflows.empty.startFromScratch') }}
-							</N8nText>
-						</div>
-					</N8nCard>
-				</div>
+				<ResourcesListEmptyState
+					v-else
+					resource-key="workflows"
+					:button-disabled="readOnlyEnv || !projectPermissions.workflow.create"
+					:disabled-tooltip-text="
+						readOnlyEnv ? i18n.baseText('readOnlyEnv.cantAdd.workflow') : undefined
+					"
+					@click:button="addWorkflow"
+				/>
 				<TemplateRecommendationV3 v-if="showTemplateRecommendationV3" />
 				<TemplateRecommendationV2 v-else-if="showTemplateRecommendationV2" />
 			</div>
@@ -2538,6 +2553,15 @@ const onNameSubmit = async (name: string) => {
 						}}
 					</template></N8nActionBox
 				>
+				<ResourcesListEmptyState
+					v-else-if="showArchivedOnlyHint && !showRecommendedTemplatesInline"
+					resource-key="workflows"
+					:button-disabled="readOnlyEnv || !projectPermissions.workflow.create"
+					:disabled-tooltip-text="
+						readOnlyEnv ? i18n.baseText('readOnlyEnv.cantAdd.workflow') : undefined
+					"
+					@click:button="addWorkflow"
+				/>
 			</div>
 			<div
 				v-if="showRecommendedTemplatesInline && showArchivedOnlyHint"
@@ -2550,6 +2574,16 @@ const onNameSubmit = async (name: string) => {
 </template>
 
 <style lang="scss" module>
+.onboardingLoading {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	height: 100%;
+	max-width: 480px;
+	margin: 0 auto;
+	padding: var(--spacing--2xl);
+}
+
 .templatesContainer {
 	display: flex;
 	justify-content: center;
@@ -2571,46 +2605,6 @@ const onNameSubmit = async (name: string) => {
 		align-items: center;
 		gap: var(--spacing--md);
 	}
-}
-
-.emptyStateCard {
-	width: 192px;
-	text-align: center;
-	display: inline-flex;
-	height: 230px;
-
-	& + & {
-		margin-left: var(--spacing--sm);
-	}
-
-	&:hover {
-		svg {
-			color: var(--color--primary);
-		}
-	}
-}
-
-.emptyStateCardContent {
-	display: inline-flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-}
-
-.emptyStateCardIcon {
-	font-size: 48px;
-
-	svg {
-		transition: color 0.3s ease;
-	}
-}
-
-.emptyStateNoTemplates {
-	display: flex;
-	flex-direction: column;
-	gap: var(--spacing--2xl);
-	align-items: center;
-	justify-content: center;
 }
 
 .breadcrumbs-container {
