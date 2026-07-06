@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { StoryObj } from '@storybook/vue3-vite';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import Switch from './Switch.vue';
 
@@ -88,11 +88,62 @@ export const States = {
 		<div style="padding: 40px; display: flex; flex-direction: column; gap: 16px;">
 			<Switch :model-value="false" label="Unchecked"/>
 			<Switch :model-value="true" label="Checked"/>
+			<Switch :model-value="false" indeterminate label="Indeterminate"/>
 			<Switch :model-value="false" label="Disabled unchecked" disabled/>
 			<Switch :model-value="true" label="Disabled checked" disabled/>
+			<Switch :model-value="false" indeterminate label="Disabled indeterminate" disabled/>
 		</div>
 		`,
 	}),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					'All visual states. Hovering a non-disabled switch stretches the thumb slightly along the track (anchored to its side; centered while indeterminate). Disabled switches do not react to hover.',
+			},
+		},
+	},
+} satisfies Story;
+
+export const Indeterminate = {
+	render: () => ({
+		components: { Switch },
+		setup() {
+			const items = ref([true, false, true]);
+			const allOn = computed(() => items.value.every(Boolean));
+			const someOn = computed(() => items.value.some(Boolean) && !allOn.value);
+			const setAll = (value: boolean) => {
+				items.value = items.value.map(() => value);
+			};
+			return { items, allOn, someOn, setAll };
+		},
+		template: `
+		<div style="padding: 40px; display: flex; flex-direction: column; gap: 16px; max-width: 300px;">
+			<Switch
+				:model-value="allOn"
+				:indeterminate="someOn"
+				label="Enable all"
+				size="large"
+				@update:model-value="setAll"
+			/>
+			<hr style="width: 100%; border: none; border-top: 1px solid var(--color--foreground);"/>
+			<Switch
+				v-for="(item, index) in items"
+				:key="index"
+				v-model="items[index]"
+				:label="'Item ' + (index + 1)"
+			/>
+		</div>
+		`,
+	}),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					'Bulk-action pattern: the top switch is indeterminate while the selection is mixed. Clicking it while indeterminate turns everything on.',
+			},
+		},
+	},
 } satisfies Story;
 
 export const WithCustomLabel = {

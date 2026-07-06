@@ -17,6 +17,26 @@ const rootProps = useForwardProps(reactivePick(props, 'required', 'value', 'defa
 
 const modelValue = defineModel<boolean>({ default: undefined });
 
+/**
+ * Proxy between the public model and the underlying SwitchRoot. While indeterminate, the
+ * switch presents as "mixed" (never checked), and any toggle resolves to `true` so a bulk
+ * action over a heterogeneous selection turns everything on.
+ */
+const switchModel = computed<boolean>({
+	get: () => (props.indeterminate ? false : modelValue.value),
+	set: (value) => {
+		modelValue.value = props.indeterminate ? true : value;
+	},
+});
+
+/**
+ * Only present while indeterminate, so that Reka UI's own `aria-checked` binding stays
+ * untouched in the regular checked/unchecked states.
+ */
+const mixedAttrs = computed(() =>
+	props.indeterminate ? { 'aria-checked': 'mixed' as const, 'data-indeterminate': '' } : {},
+);
+
 const attrs = useAttrs();
 const primitiveClass = computed(() => attrs.class);
 const rootAttrs = computed(() => reactiveOmit(attrs, ['class']));
@@ -30,8 +50,8 @@ const rootAttrs = computed(() => reactiveOmit(attrs, ['class']));
 	>
 		<SwitchRoot
 			:id="uuid"
-			v-bind="{ ...rootProps, ...rootAttrs }"
-			v-model="modelValue"
+			v-bind="{ ...rootProps, ...rootAttrs, ...mixedAttrs }"
+			v-model="switchModel"
 			:name="name"
 			:disabled="disabled"
 			:class="$style.switchRoot"
@@ -80,7 +100,9 @@ const rootAttrs = computed(() => reactiveOmit(attrs, ['class']));
 		background-color 0.15s ease,
 		border-color 0.15s ease;
 
-	&[data-state='checked'] {
+	/* The mixed state sits on the active-colored track, same as checked. */
+	&[data-state='checked'],
+	&[data-indeterminate] {
 		background-color: var(--switch--color--background--active);
 		border-color: var(--switch--color--background--active);
 	}
@@ -97,13 +119,35 @@ const rootAttrs = computed(() => reactiveOmit(attrs, ['class']));
 	top: 50%;
 	left: 2px;
 	transform: translateY(-50%);
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	background-color: var(--switch--toggle--color);
-	border-radius: 50%;
-	transition: left 0.15s ease;
-	will-change: left;
+	transition:
+		left 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+		width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+	will-change: left, width;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+
+	/* Mixed-state dash inside the thumb; hidden unless indeterminate. */
+	&::after {
+		content: '';
+		border-radius: 1px;
+		background-color: var(--switch--color--background--active);
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
 }
+
+.switchRoot[data-indeterminate] .switchThumb::after {
+	opacity: 1;
+}
+
+/*
+ * Hover/press stretch: the thumb elongates by 2px along the track. Unchecked is anchored
+ * left (grows inward to the right), checked is anchored right (left shifts in sync so it
+ * grows inward to the left), indeterminate stays centered. Disabled switches don't stretch.
+ */
 
 .label {
 	flex: 1;
@@ -130,10 +174,37 @@ const rootAttrs = computed(() => reactiveOmit(attrs, ['class']));
 .small .switchThumb {
 	width: 12px;
 	height: 12px;
+
+	/* Fixed half-height radius (not 50%) so the thumb reads as a pill while stretched. */
+	border-radius: 6px;
+
+	&::after {
+		width: 6px;
+		height: 2px;
+	}
 }
 
 .small .switchRoot[data-state='checked'] .switchThumb {
 	left: calc(100% - 14px);
+}
+
+.small .switchRoot[data-indeterminate] .switchThumb {
+	left: calc(50% - 6px);
+}
+
+.small .switchRoot:not([data-disabled]):hover .switchThumb,
+.small .switchRoot:not([data-disabled]):active .switchThumb {
+	width: 14px;
+}
+
+.small .switchRoot[data-state='checked']:not([data-disabled]):hover .switchThumb,
+.small .switchRoot[data-state='checked']:not([data-disabled]):active .switchThumb {
+	left: calc(100% - 16px);
+}
+
+.small .switchRoot[data-indeterminate]:not([data-disabled]):hover .switchThumb,
+.small .switchRoot[data-indeterminate]:not([data-disabled]):active .switchThumb {
+	left: calc(50% - 7px);
 }
 
 .small .label {
@@ -150,9 +221,34 @@ const rootAttrs = computed(() => reactiveOmit(attrs, ['class']));
 .large .switchThumb {
 	width: 16px;
 	height: 16px;
+	border-radius: 8px;
+
+	&::after {
+		width: 8px;
+		height: 2px;
+	}
 }
 
 .large .switchRoot[data-state='checked'] .switchThumb {
 	left: calc(100% - 18px);
+}
+
+.large .switchRoot[data-indeterminate] .switchThumb {
+	left: calc(50% - 8px);
+}
+
+.large .switchRoot:not([data-disabled]):hover .switchThumb,
+.large .switchRoot:not([data-disabled]):active .switchThumb {
+	width: 18px;
+}
+
+.large .switchRoot[data-state='checked']:not([data-disabled]):hover .switchThumb,
+.large .switchRoot[data-state='checked']:not([data-disabled]):active .switchThumb {
+	left: calc(100% - 20px);
+}
+
+.large .switchRoot[data-indeterminate]:not([data-disabled]):hover .switchThumb,
+.large .switchRoot[data-indeterminate]:not([data-disabled]):active .switchThumb {
+	left: calc(50% - 9px);
 }
 </style>

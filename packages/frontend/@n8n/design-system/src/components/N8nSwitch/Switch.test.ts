@@ -105,6 +105,98 @@ describe('components/N8nSwitch', () => {
 		});
 	});
 
+	describe('indeterminate', () => {
+		it('should expose aria-checked="mixed" when indeterminate', () => {
+			const wrapper = render(Switch, {
+				props: {
+					modelValue: false,
+					indeterminate: true,
+				},
+			});
+			const switchEl = wrapper.container.querySelector('[role="switch"]');
+			expect(switchEl).toHaveAttribute('aria-checked', 'mixed');
+			expect(switchEl).toHaveAttribute('data-indeterminate');
+		});
+
+		it('should not render as checked while indeterminate, even if modelValue is true', () => {
+			const wrapper = render(Switch, {
+				props: {
+					modelValue: true,
+					indeterminate: true,
+				},
+			});
+			const switchEl = wrapper.container.querySelector('[role="switch"]');
+			expect(switchEl).toHaveAttribute('data-state', 'unchecked');
+			expect(switchEl).toHaveAttribute('aria-checked', 'mixed');
+		});
+
+		it('should emit true on click while indeterminate', async () => {
+			const wrapper = render(Switch, {
+				props: {
+					modelValue: false,
+					indeterminate: true,
+				},
+			});
+
+			const switchEl = wrapper.container.querySelector('[role="switch"]');
+			await userEvent.click(switchEl!);
+
+			await waitFor(() => {
+				expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([true]);
+			});
+		});
+
+		it('should emit true on keyboard toggle while indeterminate', async () => {
+			const wrapper = render(Switch, {
+				props: {
+					modelValue: false,
+					indeterminate: true,
+				},
+			});
+
+			const switchEl = wrapper.container.querySelector('[role="switch"]') as HTMLElement;
+			switchEl?.focus();
+			await userEvent.keyboard(' ');
+
+			await waitFor(() => {
+				expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([true]);
+			});
+		});
+
+		it('should not emit when indeterminate and disabled', async () => {
+			const wrapper = render(Switch, {
+				props: {
+					modelValue: false,
+					indeterminate: true,
+					disabled: true,
+				},
+			});
+
+			const switchEl = wrapper.container.querySelector('[role="switch"]');
+			await userEvent.click(switchEl!);
+
+			await waitFor(() => {
+				expect(wrapper.emitted('update:modelValue')).toBeFalsy();
+			});
+		});
+
+		it('should render normally once indeterminate is cleared', async () => {
+			const wrapper = render(Switch, {
+				props: {
+					modelValue: true,
+					indeterminate: true,
+				},
+			});
+
+			await wrapper.rerender({ modelValue: true, indeterminate: false });
+
+			const switchEl = wrapper.container.querySelector('[role="switch"]');
+			expect(switchEl).toHaveAttribute('data-state', 'checked');
+			expect(switchEl).toHaveAttribute('aria-checked', 'true');
+			expect(switchEl).not.toHaveAttribute('data-indeterminate');
+		});
+	});
+
 	describe('defaultValue', () => {
 		it('should use defaultValue when provided', () => {
 			const wrapper = render(Switch, {

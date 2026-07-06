@@ -1,6 +1,6 @@
 # Component specification
 
-A toggle control that allows users to switch between two states (on/off). The Switch component is ideal for binary choices where the effect is immediate, such as enabling or disabling a feature.
+A toggle control that allows users to switch between two states (on/off). The Switch component is ideal for binary choices where the effect is immediate, such as enabling or disabling a feature. It also supports an indeterminate (mixed) state for bulk actions over a heterogeneous selection.
 
 - **Component Name:** N8nSwitch
 - **Figma Component:** [Figma](https://www.figma.com/design/8zib7Trf2D2CHYXrEGPHkg/n8n-Design-System-V3?node-id=81-530&m=dev)
@@ -20,6 +20,7 @@ A toggle control that allows users to switch between two states (on/off). The Sw
 - `name?: string` - The name of the switch for form submission
 - `value?: string` - The value given as data when submitted with a name
 - `size?: 'small' | 'large'` - The size of the switch. Defaults to `'small'`
+- `indeterminate?: boolean` - When `true`, renders a mixed state (thumb centered on the active track, with a dash) and exposes `aria-checked="mixed"`. Clicking while indeterminate emits `update:modelValue` with `true`. The parent is responsible for clearing the flag once the selection becomes homogeneous
 - `as?: string | Component` - Change the default rendered element for the one passed as a child, merging their props and behavior
 
 
