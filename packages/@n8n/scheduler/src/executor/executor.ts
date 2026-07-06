@@ -156,7 +156,7 @@ export class Executor {
 		// handler failure. Such a failure propagates out (caught by the detached `.catch`
 		// in claimAndSchedule) and leaves the row `running` for the reaper.
 		try {
-			await handler.execute(task);
+			await handler(task);
 		} catch (error) {
 			const message = ensureError(error).message;
 			const nextAttempts = task.attempts + 1;

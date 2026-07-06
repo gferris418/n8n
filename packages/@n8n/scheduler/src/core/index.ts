@@ -23,6 +23,7 @@ export {
 } from './enums';
 
 export type {
+	ClaimedTask,
 	CronSchedule,
 	IntervalSchedule,
 	OneOffSchedule,

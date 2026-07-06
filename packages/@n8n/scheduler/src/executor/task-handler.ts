@@ -4,17 +4,17 @@ import type { ClaimedTask } from '../core/types';
 
 /**
  * Runs one claimed task. Registered against a `taskType`; the executor resolves
- * the handler for a task's type and calls `execute`. A throw means the attempt
- * failed (the executor retries with backoff or marks the task failed).
+ * the handler for a task's type and calls it. A throw means the attempt failed
+ * (the executor retries with backoff or marks the task failed); resolving means
+ * the work was handed off and the task can complete.
  */
-export interface TaskHandler {
-	execute(task: ClaimedTask): Promise<void>;
-}
+export type TaskHandler = (task: ClaimedTask) => Promise<void>;
 
 /**
- * Where handlers register themselves by `taskType`. The executor claims only the
- * types present here (`registeredTypes`), so an instance never picks up work it
- * has no handler for.
+ * Where handlers live, keyed by `taskType`.
+ * Internal: integrations register hrough the `Scheduler` entry point; only the executor resolves from here.
+ * The executor claims only the types present (`registeredTypes`), so an
+ * instance never picks up work it has no handler for.
  */
 export class TaskHandlerRegistry {
 	private readonly handlers = new Map<string, TaskHandler>();

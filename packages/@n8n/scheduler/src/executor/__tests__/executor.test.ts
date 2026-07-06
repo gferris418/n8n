@@ -102,7 +102,7 @@ describe('Executor.claimAndSchedule', () => {
 		const { taskRepository, registry, timer, logger, executor } = setup();
 		const task = claimedTask();
 		registry.registeredTypes.mockReturnValue(['workflow:schedule-trigger']);
-		registry.resolve.mockReturnValue({ execute: vi.fn() });
+		registry.resolve.mockReturnValue(vi.fn());
 		taskRepository.claimDueTasks.mockResolvedValue([task] as unknown as ScheduledTaskEntity[]);
 		// Make fire reject at its markStarted call to exercise the detached-error path.
 		taskRepository.markStarted.mockRejectedValue(new Error('db down'));
@@ -123,27 +123,27 @@ describe('Executor.claimAndSchedule', () => {
 describe('Executor.fire', () => {
 	it('does not dispatch when the row is gone or reclaimed', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn() };
+		const handler: TaskHandler = vi.fn();
 		registry.resolve.mockReturnValue(handler);
 		taskRepository.markStarted.mockResolvedValue(0);
 
 		await executor.fire(HOST, claimedTask());
 
-		expect(handler.execute).not.toHaveBeenCalled();
+		expect(handler).not.toHaveBeenCalled();
 		expect(taskRepository.completeTask).not.toHaveBeenCalled();
 		expect(taskRepository.failTaskTerminal).not.toHaveBeenCalled();
 	});
 
 	it('dispatches and completes on handler success', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockResolvedValue(undefined) };
+		const handler: TaskHandler = vi.fn().mockResolvedValue(undefined);
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		const task = claimedTask();
 
 		await executor.fire(HOST, task);
 
-		expect(handler.execute).toHaveBeenCalledWith(task);
+		expect(handler).toHaveBeenCalledWith(task);
 		expect(taskRepository.completeTask).toHaveBeenCalledWith({
 			host: HOST,
 			id: task.id,
@@ -155,7 +155,7 @@ describe('Executor.fire', () => {
 
 	it('threads the claimed lease epoch through the terminal calls for fencing', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockResolvedValue(undefined) };
+		const handler: TaskHandler = vi.fn().mockResolvedValue(undefined);
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		const task = claimedTask({ leaseEpoch: 7 });
@@ -176,7 +176,7 @@ describe('Executor.fire', () => {
 
 	it('propagates when recording success fails, without treating it as a handler failure', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockResolvedValue(undefined) };
+		const handler: TaskHandler = vi.fn().mockResolvedValue(undefined);
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		taskRepository.completeTask.mockRejectedValue(new Error('db down'));
@@ -191,7 +191,7 @@ describe('Executor.fire', () => {
 
 	it('retries with backoff for the next attempt when the handler fails and attempts remain', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockRejectedValue(new Error('boom')) };
+		const handler: TaskHandler = vi.fn().mockRejectedValue(new Error('boom'));
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		const task = claimedTask({ attempts: 0, maxAttempts: 3, leaseEpoch: 7 });
@@ -210,7 +210,7 @@ describe('Executor.fire', () => {
 
 	it('uses the next attempt number for backoff on a middle attempt', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockRejectedValue(new Error('boom')) };
+		const handler: TaskHandler = vi.fn().mockRejectedValue(new Error('boom'));
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		const task = claimedTask({ attempts: 1, maxAttempts: 3, leaseEpoch: 7 });
@@ -227,7 +227,7 @@ describe('Executor.fire', () => {
 
 	it('fails terminally when the handler fails on the single default attempt', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockRejectedValue(new Error('boom')) };
+		const handler: TaskHandler = vi.fn().mockRejectedValue(new Error('boom'));
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		const task = claimedTask({ attempts: 0, maxAttempts: 1, leaseEpoch: 7 });
@@ -244,7 +244,7 @@ describe('Executor.fire', () => {
 
 	it('fails terminally on the final attempt of a multi-attempt task', async () => {
 		const { taskRepository, registry, executor } = setup();
-		const handler: TaskHandler = { execute: vi.fn().mockRejectedValue(new Error('boom')) };
+		const handler: TaskHandler = vi.fn().mockRejectedValue(new Error('boom'));
 		taskRepository.markStarted.mockResolvedValue(1);
 		registry.resolve.mockReturnValue(handler);
 		// nextAttempt = 3 == maxAttempts -> terminal, not another retry.
@@ -311,7 +311,7 @@ describe('Executor.stop', () => {
 		const { taskRepository, registry, timer, executor } = setup();
 		const task = claimedTask({ id: 'a' });
 		registry.registeredTypes.mockReturnValue(['workflow:schedule-trigger']);
-		registry.resolve.mockReturnValue({ execute: vi.fn().mockResolvedValue(undefined) });
+		registry.resolve.mockReturnValue(vi.fn().mockResolvedValue(undefined));
 		taskRepository.claimDueTasks.mockResolvedValue([task] as unknown as ScheduledTaskEntity[]);
 		taskRepository.markStarted.mockResolvedValue(1); // fire proceeds and completes
 

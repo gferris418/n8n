@@ -1,6 +1,6 @@
 import { TaskHandlerRegistry, type TaskHandler } from '../task-handler';
 
-const fakeHandler = (): TaskHandler => ({ execute: async () => {} });
+const fakeHandler = (): TaskHandler => async () => {};
 
 describe('TaskHandlerRegistry', () => {
 	it('resolves a registered handler by task type', () => {
